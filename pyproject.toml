@@ -1,0 +1,13 @@
+[project]
+name = "ctrlc-c"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "keyboard>=0.13.5",
+    "pyinstaller>=6.14.2",
+    "pyperclip>=1.9.0",
+    "pystray>=0.19.5",
+    "pywin32>=310",
+]
