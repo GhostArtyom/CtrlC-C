@@ -2,6 +2,7 @@ import os
 import sys
 import pyperclip
 import keyboard
+import threading
 from threading import Timer
 from pystray import MenuItem as item
 import pystray
@@ -92,9 +93,21 @@ def is_in_startup():
         return False
 
 
-def show_message_box(title, message):
+def show_message_box(title, message, ask_hide_tray=False):
     """Show a message box with the given title and message."""
-    return windll.user32.MessageBoxW(0, message, title, 0)
+    MB_YESNO = 0x04  # Show "Yes" and "No" buttons
+    IDYES = 6  # Return value when user clicks "Yes"
+
+    if ask_hide_tray:
+        # Append tray hide question to message
+        message += "\n\n是否隐藏托盘图标？"
+        result = windll.user32.MessageBoxW(0, message, title, MB_YESNO)
+        if result == IDYES:
+            return True  # User chose to hide the tray
+    else:
+        # Show standard message box
+        windll.user32.MessageBoxW(0, message, title, 0)
+    return False  # User chose not to hide the tray
 
 
 def toggle_strip_blankspace():
@@ -144,7 +157,7 @@ def set_clipboard_text(text):
 
 def on_c_press(event):
     global strip_attempted
-    """Start a timer after first 'C' press, if 'Ctrl' is held down"""
+    """Start a timer after first 'C' press, if 'Ctrl' is held down."""
     if keyboard.is_pressed('ctrl'):
         if hasattr(on_c_press, 'first_press_timer') and on_c_press.first_press_timer is not None:
             # If timer exists, we are within 1.0 seconds of first press, so we execute the action
@@ -188,12 +201,12 @@ def perform_clipboard_action():
 
 
 def reset_first_press_timer():
-    """Reset the timer for double 'C' press"""
+    """Reset the timer for double 'C' press."""
     on_c_press.first_press_timer = None
 
 
 def create_icon(image_name):
-    """The application is frozen"""
+    """The application is frozen."""
     if getattr(sys, 'frozen', False):
         base_path = sys._MEIPASS
     # The application is not frozen
@@ -205,32 +218,41 @@ def create_icon(image_name):
     return Image.open(icon_path)
 
 
-def setup_tray_icon():
-    """Load your own image as icon and setup tray icon with menu"""
+def setup_tray_icon(hide_tray_icon):
+    """Load your own image as icon and setup tray icon with menu."""
     icon_image = create_icon("ctrlcc.ico")
 
     # The menu that will appear when the user right-clicks the icon
-    menu = (item('Toggle Start on Boot', toggle_startup, checked=lambda item: is_in_startup()),
-            item('Toggle Strip Blank Space', toggle_strip_blankspace,
-                 checked=lambda item: is_strip_blankspace),
-            item('View Logs', view_logs),
-            item('Exit', exit_program),)
-    icon = pystray.Icon("test_icon", icon_image, "CtrlC+C", menu)
-    icon.run()
+    menu = (
+        item('Toggle Start on Boot', toggle_startup, checked=lambda item: is_in_startup()),
+        item('Toggle Strip Blank Space', toggle_strip_blankspace, checked=lambda item: is_strip_blankspace),
+        item('View Logs', view_logs),
+        item('Hide Tray', hide_tray),
+        item('Exit', exit_program),
+    )
+
+    if not hide_tray_icon:
+        icon = pystray.Icon("ctrlcc", icon_image, "CtrlC+C", menu)
+        icon.run()
+    else:
+        threading.Event().wait()
 
 
-def exit_program(icon, item):
-    """Exit the program and stop the system tray icon"""
-    icon.stop()  # This will stop the system tray icon and the associated message loop.
+def hide_tray(icon):
+    """Hide the system tray icon."""
+    icon.visible = False  # This will hide the system tray icon
+
+
+def exit_program(icon):
+    """Exit the program and stop the system tray icon."""
+    icon.stop()  # This will stop the system tray icon and the associated message loop
     keyboard.unhook_all()
-    # print("Exiting program...")
 
 
 if __name__ == "__main__":
 
     log_filepath = get_log_file_path()
-    logging.basicConfig(filename=log_filepath, level=logging.INFO,
-                        format='%(asctime)s - %(levelname)s - %(message)s')
+    logging.basicConfig(filename=log_filepath, level=logging.INFO, format='%(asctime)s, %(levelname)s, %(message)s')
 
     strip_attempted = False
     strip_executed = False
@@ -247,19 +269,9 @@ if __name__ == "__main__":
         sys.exit(0)
 
     # Show instruction message box
-    instruction_message = (
-        "欢迎使用 CtrlC+C ！\n"
-        "\n"
-        "【按住 Ctrl 键并按 C 键两次】以复制文本并删除换行。\n"
-        "\n"
-        "如有问题，请联系：chenluda01@gmail.com"
-    )
-    show_message_box("© 2023 Glenn.", instruction_message)
+    instruction_message = ("欢迎使用 CtrlC+C ！\n\n【按住 Ctrl 键并按 C 键两次】以复制文本并删除换行。\n\n如有问题，请联系：\nchenluda01@gmail.com 或 ghostartyomns@gmail.com")
+    hide_tray_icon = show_message_box("© 2025 Glenn & GhostArtyom.", instruction_message, ask_hide_tray=True)
 
-    # Initialization and event hooks
-    # print("Hold Ctrl and press C twice to copy text and remove newlines...")
-    # print("Press Esc to quit.")
     on_c_press.first_press_timer = None
     keyboard.on_release_key('c', on_c_press)
-    # keyboard.add_hotkey('esc', lambda: exit_program(None, None))  # Adapted for direct call
-    setup_tray_icon()  # Start the system tray icon
+    setup_tray_icon(hide_tray_icon)  # Start the system tray icon
